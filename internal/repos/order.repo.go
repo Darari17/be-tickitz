@@ -51,7 +51,6 @@ func (or *OrderRepo) CreateOrder(ctx context.Context, order *models.Order, seatI
 		}
 	}
 
-	// ✅ isi order.Seats biar response tidak null
 	rows, err := tx.Query(ctx, `SELECT id, seat_code FROM seats WHERE id = ANY($1)`, seatIDs)
 	if err != nil {
 		return nil, err
