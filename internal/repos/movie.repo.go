@@ -27,7 +27,11 @@ func (mr *MovieRepo) GetUpcomingMovies(ctx context.Context, page int) ([]models.
 
 	redisKey := fmt.Sprintf("movies:upcoming:page:%d", page)
 	var cached []models.Movie
-	if ok, _ := utils.GetCacheRedis(ctx, mr.redis, redisKey, &cached); ok {
+
+	ok, err := utils.GetCacheRedis(ctx, mr.redis, redisKey, &cached)
+	if err != nil {
+		fmt.Printf("redis error: %v\n", err)
+	} else if ok {
 		return cached, nil
 	}
 
@@ -76,7 +80,10 @@ func (mr *MovieRepo) GetUpcomingMovies(ctx context.Context, page int) ([]models.
 		movies = append(movies, m)
 	}
 
-	_ = utils.SetCacheRedis(ctx, mr.redis, redisKey, movies, 5*time.Minute)
+	if err := utils.SetCacheRedis(ctx, mr.redis, redisKey, movies, 5*time.Minute); err != nil {
+		fmt.Printf("failed to set redis cache: %v\n", err)
+	}
+
 	return movies, nil
 }
 
@@ -86,7 +93,10 @@ func (mr *MovieRepo) GetPopularMovies(ctx context.Context, page int) ([]models.M
 
 	redisKey := fmt.Sprintf("movies:popular:page:%d", page)
 	var cached []models.Movie
-	if ok, _ := utils.GetCacheRedis(ctx, mr.redis, redisKey, &cached); ok {
+	ok, err := utils.GetCacheRedis(ctx, mr.redis, redisKey, &cached)
+	if err != nil {
+		fmt.Printf("redis error: %v\n", err)
+	} else if ok {
 		return cached, nil
 	}
 
@@ -134,7 +144,10 @@ func (mr *MovieRepo) GetPopularMovies(ctx context.Context, page int) ([]models.M
 		movies = append(movies, m)
 	}
 
-	_ = utils.SetCacheRedis(ctx, mr.redis, redisKey, movies, 5*time.Minute)
+	if err := utils.SetCacheRedis(ctx, mr.redis, redisKey, movies, 5*time.Minute); err != nil {
+		fmt.Printf("failed to set redis cache: %v\n", err)
+	}
+
 	return movies, nil
 }
 
@@ -144,7 +157,10 @@ func (mr *MovieRepo) GetAllMovies(ctx context.Context, page int, search string, 
 
 	redisKey := fmt.Sprintf("movies:all:page:%d:search:%s:genre:%s", page, search, genreName)
 	var cached []models.Movie
-	if ok, _ := utils.GetCacheRedis(ctx, mr.redis, redisKey, &cached); ok {
+	ok, err := utils.GetCacheRedis(ctx, mr.redis, redisKey, &cached)
+	if err != nil {
+		fmt.Printf("redis error: %v\n", err)
+	} else if ok {
 		return cached, nil
 	}
 
@@ -198,14 +214,19 @@ func (mr *MovieRepo) GetAllMovies(ctx context.Context, page int, search string, 
 		movies = append(movies, m)
 	}
 
-	_ = utils.SetCacheRedis(ctx, mr.redis, redisKey, movies, 5*time.Minute)
+	if err := utils.SetCacheRedis(ctx, mr.redis, redisKey, movies, 5*time.Minute); err != nil {
+		fmt.Printf("failed to set redis cache: %v\n", err)
+	}
 	return movies, nil
 }
 
 func (mr *MovieRepo) GetMovieDetail(ctx context.Context, id int) (*models.Movie, error) {
 	redisKey := fmt.Sprintf("movies:detail:%d", id)
 	var cached models.Movie
-	if ok, _ := utils.GetCacheRedis(ctx, mr.redis, redisKey, &cached); ok {
+	ok, err := utils.GetCacheRedis(ctx, mr.redis, redisKey, &cached)
+	if err != nil {
+		fmt.Printf("redis error: %v\n", err)
+	} else if ok {
 		return &cached, nil
 	}
 
@@ -233,7 +254,7 @@ func (mr *MovieRepo) GetMovieDetail(ctx context.Context, id int) (*models.Movie,
 	var m models.Movie
 	var genresJSON, castsJSON []byte
 
-	err := mr.db.QueryRow(ctx, sql, id).Scan(
+	err = mr.db.QueryRow(ctx, sql, id).Scan(
 		&m.ID, &m.Backdrop, &m.Overview, &m.Popularity, &m.Poster,
 		&m.ReleaseDate, &m.Duration, &m.Title, &m.Director,
 		&m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
@@ -250,6 +271,8 @@ func (mr *MovieRepo) GetMovieDetail(ctx context.Context, id int) (*models.Movie,
 		return nil, err
 	}
 
-	_ = utils.SetCacheRedis(ctx, mr.redis, redisKey, m, 5*time.Minute)
+	if err := utils.SetCacheRedis(ctx, mr.redis, redisKey, m, 5*time.Minute); err != nil {
+		fmt.Printf("failed to set redis cache: %v\n", err)
+	}
 	return &m, nil
 }
