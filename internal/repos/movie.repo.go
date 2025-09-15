@@ -138,6 +138,66 @@ func (mr *MovieRepo) GetPopularMovies(ctx context.Context, page int) ([]models.M
 	return movies, nil
 }
 
+// func (mr *MovieRepo) GetAllMovies(ctx context.Context, page int, search string, genreName string) ([]models.Movie, error) {
+// 	const pageSize = 12
+// 	offset := (page - 1) * pageSize
+
+// 	redisKey := fmt.Sprintf("movies:all:page:%d:search:%s:genre:%s", page, search, genreName)
+// 	var cached []models.Movie
+// 	if ok, _ := utils.GetCacheRedis(ctx, mr.redis, redisKey, &cached); ok {
+// 		return cached, nil
+// 	}
+
+// 	sql := `
+// 		SELECT m.id, m.backdrop_path, m.overview, m.popularity, m.poster_path,
+// 		       m.release_date, m.duration, m.title, m.director_name,
+// 		       m.created_at, m.updated_at, m.deleted_at,
+// 		       COALESCE(JSON_AGG(DISTINCT jsonb_build_object('id', g.id, 'name', g.name))
+// 		                FILTER (WHERE g.id IS NOT NULL), '[]') AS genres,
+// 		       COALESCE(JSON_AGG(DISTINCT jsonb_build_object('id', c.id, 'name', c.name))
+// 		                FILTER (WHERE c.id IS NOT NULL), '[]') AS casts
+// 		FROM movies m
+// 		LEFT JOIN movies_genres mg ON m.id = mg.movies_id
+// 		LEFT JOIN genres g ON g.id = mg.genres_id
+// 		LEFT JOIN movies_casts mc ON m.id = mc.movies_id
+// 		LEFT JOIN casts c ON c.id = mc.casts_id
+// 		WHERE ($1 = '' OR LOWER(m.title) LIKE LOWER('%' || $1 || '%'))
+// 		  AND ($2 = '' OR LOWER(g.name) = LOWER($2))
+// 		GROUP BY m.id
+// 		ORDER BY m.release_date DESC
+// 		LIMIT $3 OFFSET $4
+// 	`
+
+// 	rows, err := mr.db.Query(ctx, sql, search, genreName, pageSize, offset)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer rows.Close()
+
+// 	var movies []models.Movie
+// 	for rows.Next() {
+// 		var m models.Movie
+// 		var genresJSON, castsJSON []byte
+
+// 		if err := rows.Scan(
+// 			&m.ID, &m.Backdrop, &m.Overview, &m.Popularity, &m.Poster,
+// 			&m.ReleaseDate, &m.Duration, &m.Title, &m.Director,
+// 			&m.CreatedAt, &m.UpdatedAt, &m.DeletedAt,
+// 			&genresJSON, &castsJSON,
+// 		); err != nil {
+// 			return nil, err
+// 		}
+
+// 		_ = json.Unmarshal(genresJSON, &m.Genres)
+// 		_ = json.Unmarshal(castsJSON, &m.Casts)
+
+// 		movies = append(movies, m)
+// 	}
+
+// 	_ = utils.SetCacheRedis(ctx, mr.redis, redisKey, movies, 5*time.Minute)
+// 	return movies, nil
+// }
+
 func (mr *MovieRepo) GetAllMovies(ctx context.Context, page int, search string, genreName string) ([]models.Movie, error) {
 	const pageSize = 12
 	offset := (page - 1) * pageSize
@@ -149,23 +209,27 @@ func (mr *MovieRepo) GetAllMovies(ctx context.Context, page int, search string, 
 	}
 
 	sql := `
-		SELECT m.id, m.backdrop_path, m.overview, m.popularity, m.poster_path,
-		       m.release_date, m.duration, m.title, m.director_name,
-		       m.created_at, m.updated_at, m.deleted_at,
-		       COALESCE(JSON_AGG(DISTINCT jsonb_build_object('id', g.id, 'name', g.name))
-		                FILTER (WHERE g.id IS NOT NULL), '[]') AS genres,
-		       COALESCE(JSON_AGG(DISTINCT jsonb_build_object('id', c.id, 'name', c.name))
-		                FILTER (WHERE c.id IS NOT NULL), '[]') AS casts
-		FROM movies m
-		LEFT JOIN movies_genres mg ON m.id = mg.movies_id
-		LEFT JOIN genres g ON g.id = mg.genres_id
-		LEFT JOIN movies_casts mc ON m.id = mc.movies_id
-		LEFT JOIN casts c ON c.id = mc.casts_id
-		WHERE ($1 = '' OR LOWER(m.title) LIKE LOWER('%' || $1 || '%'))
-		  AND ($2 = '' OR LOWER(g.name) = LOWER($2))
-		GROUP BY m.id
-		ORDER BY m.release_date DESC
-		LIMIT $3 OFFSET $4
+		WITH filtered AS (
+			SELECT m.id, m.backdrop_path, m.overview, m.popularity, m.poster_path,
+			       m.release_date, m.duration, m.title, m.director_name,
+			       m.created_at, m.updated_at, m.deleted_at,
+			       COALESCE(JSON_AGG(DISTINCT jsonb_build_object('id', g.id, 'name', g.name))
+			                FILTER (WHERE g.id IS NOT NULL), '[]') AS genres,
+			       COALESCE(JSON_AGG(DISTINCT jsonb_build_object('id', c.id, 'name', c.name))
+			                FILTER (WHERE c.id IS NOT NULL), '[]') AS casts
+			FROM movies m
+			LEFT JOIN movies_genres mg ON m.id = mg.movies_id
+			LEFT JOIN genres g ON g.id = mg.genres_id
+			LEFT JOIN movies_casts mc ON m.id = mc.movies_id
+			LEFT JOIN casts c ON c.id = mc.casts_id
+			WHERE ($1 = '' OR LOWER(m.title) LIKE LOWER('%' || $1 || '%'))
+			  AND ($2 = '' OR LOWER(g.name) = LOWER($2))
+			GROUP BY m.id
+		)
+		SELECT *
+		FROM filtered
+		ORDER BY release_date DESC
+		LIMIT $3 OFFSET $4;
 	`
 
 	rows, err := mr.db.Query(ctx, sql, search, genreName, pageSize, offset)
